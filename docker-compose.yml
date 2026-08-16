@@ -1,0 +1,114 @@
+version: "3.9"
+
+# Infrastruktur für den Distributed Rate Limiter & Audit System:
+# - Redis:      synchroner Fast-Path (Token-Bucket via Lua, siehe ADR-001)
+# - Kafka:      asynchroner Audit-Event-Bus (KRaft, kein Zookeeper, siehe ADR-002)
+# - PostgreSQL: persistente Audit-Log-Senke (siehe ADR-003)
+#
+# Alle Services sind über feste Servicenamen (redis, kafka, postgres) im
+# Netzwerk "rate-limiter-net" per DNS erreichbar, sobald die Backend-Services
+# (Rate Limiter / Audit Consumer) diesem Compose-Setup hinzugefügt werden.
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    hostname: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    # Healthcheck: "redis-cli ping" prüft, ob der Redis-Server Anfragen auf
+    # dem Loopback-Interface beantwortet (Antwort "PONG"). Damit stellen wir
+    # sicher, dass abhängige Services erst starten, wenn der In-Memory-Store
+    # für die Token-Bucket-Prüfung tatsächlich bereit ist.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - rate-limiter-net
+
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    hostname: kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      # --- KRaft-Modus: kein Zookeeper, Broker und Controller in einem Prozess ---
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+
+      # --- Listener-Konfiguration (Single-Node) ---
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      # --- Single-Node-Broker-Defaults ---
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    # Healthcheck: "kafka-broker-api-versions.sh" fragt den Broker über das
+    # Kafka-Protokoll nach seiner API-Version. Ein reiner Port-Check (z.B. nc)
+    # würde nur die TCP-Erreichbarkeit prüfen, nicht aber, ob der Broker
+    # tatsächlich am KRaft-Quorum teilnimmt und Requests verarbeiten kann.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - rate-limiter-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    hostname: postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: audit_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # Healthcheck: "pg_isready" prüft direkt beim Postgres-Server, ob dieser
+    # Verbindungen für die konfigurierte Datenbank/Rolle (audit_db/admin)
+    # annimmt - relevant, da der Container-Start bereits vor Abschluss der
+    # Initialisierung (initdb) auf Netzwerkebene erreichbar sein kann.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d audit_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - rate-limiter-net
+
+networks:
+  rate-limiter-net:
+    driver: bridge
+
+volumes:
+  redis-data:
+  kafka-data:
+  postgres-data:
