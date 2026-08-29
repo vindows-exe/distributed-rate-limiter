@@ -1,0 +1,87 @@
+# ==========================================
+# 1. Maven & Build-Artefakte
+# ==========================================
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.flattened-pom.xml
+
+# ==========================================
+# 2. Logs, Dumps & Laufzeit-Artefakte
+# ==========================================
+*.log
+logs/
+*.dump
+*.dumpstream
+hs_err_pid*
+replay_pid*
+
+# ==========================================
+# 3. Geheimnisse & Lokale Konfigurationen (Security First)
+# ==========================================
+.env
+.env.*
+*.env
+application-local.properties
+application-local.yml
+application-local.yaml
+secrets.properties
+secrets.yml
+secrets.yaml
+
+# ==========================================
+# 4. Betriebssystem-Rauschen
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ==========================================
+# 5. Editoren & IDEs
+# ==========================================
+# Neovim / Vim
+*.swp
+*.swo
+*.un~
+*~
+.netrwhist
+Session.vim
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Eclipse
+.classpath
+.project
+.settings/
+.factorypath
