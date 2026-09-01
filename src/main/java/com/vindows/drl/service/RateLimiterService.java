@@ -32,10 +32,6 @@ public class RateLimiterService {
     this.clock = clock;
   }
 
-  public RateLimiterService(StringRedisTemplate redisTemplate, RedisScript<List> tokenBucketScript, Clock clock) {
-    this(redisTemplate, tokenBucketScript, Clock.systemUTC());
-  }
-
   public RateLimitResult isAllowed(RateLimitRequest request) {
     validateRequest(request);
 
